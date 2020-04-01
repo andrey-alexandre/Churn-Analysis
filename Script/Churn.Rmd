@@ -1,0 +1,144 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+```{r Import libraries, include=FALSE}
+library(readr)
+library(dplyr)
+library(survival)
+library(ggplot2)
+library(muhaz)
+library(survsim)
+se <- function(y, y_hat){
+  e <- y - y_hat
+  se <- e^2
+  
+  return(se)
+}
+pe <- function(y, y_hat){
+  e <- y - y_hat
+  pe <- e/y
+  
+  return(pe)
+}
+```
+# Introduction
+
+This notebook intends to exemplify the workflow for a Churn project that contains not only the predictive part of the churn, but also an study about the applicable treatments and their effects on the target variable. The project structure is shown in the README.md file of the git, so it's a good ideia to go and read that to have a better understanding of the hole process. 
+
+The data that we are going to use is the 'Telecomunication Costumer Churn', so it is about the costumers that leave the company for any given reason. For that we have a csv file that contains 7032 rows and 21 columns, one of them being the Churn column.
+
+# ETL
+
+The first step for any project is the ETL so we can clean and do some feature enginnering to ease our task later. This step is iterative and may be revisited and better explained as the project goes by. 
+
+Here I have filter the 'tenure' column to remove the zero values since this column gives us the time that the client is with the company as months and we don't learn much from the clients that just joined the company. When working with the semi-parametric Cox proportional hazard model it was seen that the automatic payment methods had no significant difference, so we combine them to reduce our estimated parameters.
+```{r message=FALSE}
+data <- 
+  read_csv('Data/Telco_Costumer_Churn.csv')%>% 
+  filter(tenure != 0) %>%
+  mutate(PaymentMethod = ifelse(stringr::str_detect(PaymentMethod, 'automatic'), 'Automatic', PaymentMethod),
+         SeniorCitizen = factor(SeniorCitizen, levels = c(0, 1), labels = c('No', 'Yes')),
+         Churn = ifelse(Churn == 'Yes', 1 ,0))  %>% 
+  mutate_if(is.character, as.factor)
+
+# Define variables 
+time <- data$tenure
+event <- data$Churn
+X <- data %>% select(-contains('ID'), -Churn, -tenure)
+```
+
+# Exploratory Data Analysis
+
+As we can see from the table below there is a little rigth skewness on the data, since the median is lower than the mean, and, although its not a proof, that indicates non-normality on the data, a characteristic that we already waited, since we are going to try and model it with survival models. The oldest client of the company is there for 6 years at total, while the average would be around 2 years and a half.
+```{r}
+summary(time)
+```
+
+The histogram reinforces our view that the data is both non normal and right skewed, as expected on this kind of problem, since most people either change companies really quickly or keep their lines for a long time.
+```{r}
+hist(time, breaks = seq(0, 80, 5))
+```
+
+This telcom has a total of 27% of churn, as we can see in the table below.
+```{r}
+table(event) %>% prop.table() %>% round(2)
+```
+
+
+```{r}
+summary(X)
+```
+
+The following code is usefull for the EDA, since it gives us many plot at once, so if you want to see them, they are on the Survival.pdf file. As seen in the plots, there is little difference between gender for the survival probability. If you are a senior citizen, have internet services, have month to month contract or have paperless billing then you are more likely to be a churn as time passes by. If you have a partner, or dependents, you are more likely to stay with the company. And if doesn't make much difference to have phone service.
+```{r eval=FALSE, include=FALSE}
+nomes <- colnames(select_if(X, is.factor))
+p <- list()
+
+# This codes creates multiple plots to analyse the survival probabilities by every group
+for(i in nomes){
+  group <- X[, i, T]
+  kmsurvival <- survfit(Surv(time, event) ~ group)
+  summary_kmsurvival <- summary(kmsurvival)
+  
+  p[[i]] <- 
+    data.frame(time = kmsurvival$time, group = rep(levels(group), kmsurvival$strata), prob = kmsurvival$surv) %>% 
+    ggplot(aes(x = time, y = prob, col = group)) +
+    geom_line() +
+    labs(x = 'Tempo', y = 'Probabilidade de sobrevivência', title = paste('Sobrevivência por', i)) +
+    scale_y_continuous(limits = c(0.2, 1), breaks = seq(.2, 1, .1))
+}
+pdf(file = 'Survival.pdf')
+p
+dev.off()
+```
+
+# Modelling
+
+The model used had no specific phone nor internet services, since it made the dataset have multicollinearity and made the predictions worse. Other variable that had lowe impact on the survival probability were taken away as seen in the EDA.
+```{r}
+logistic <-  survreg(Surv(time,event) ~ ., 
+                        data = select(X, -MultipleLines, -OnlineBackup, -OnlineSecurity, 
+                                      -DeviceProtection, -TechSupport, -StreamingTV, 
+                                      -StreamingMovies, -gender, -SeniorCitizen),
+                        dist="logistic")
+summary(logistic)
+```
+
+The root mean squared error of the model was almost 20, so it is probabily a good fit.
+```{r}
+se(time, predict(logistic, type ='response')) %>% mean %>% sqrt
+```
+
+We can see the MAPE as well, and here we have that the median absolute percentual error is .40, or 40%, which is, for our case, an acceptable error.
+```{r}
+pe(time, predict(logistic, type ='response')) %>% abs %>% median
+```
+
+# Simulation
+Suppose that we have done an sampling and got 1000 samples to test for a treatment for the Telecom clients. While 495 of them received the treatment, 505 were taken as control.
+```{r}
+set.seed(145)
+sim.data <- simple.surv.sim(n=1000, foltime=36, dist.ev=c('llogistic'),
+                            anc.ev= .5, beta0.ev=5, anc.cens=.3,
+                            beta0.cens=2, beta=list(c(-0.4)), x=list(c("bern", 0.5)))
+```
+
+As we can see from the plot bellow, there is little difference between the treatment and control, but the control group still has better survival probability.
+```{r}
+kmsurvival_t <- survfit(Surv(stop, status) ~ x, data = sim.data)
+summary_kmsurvival_t <- summary(kmsurvival_t)
+data.frame(time = summary_kmsurvival_t$time, group = summary_kmsurvival_t$strata, prob = summary_kmsurvival_t$surv) %>% 
+  ggplot(aes(x = time, y = prob, col = group)) +
+  geom_line() +
+  labs(x = 'Tempo', y = 'Probabilidade de sobrevivência', title = paste('Sobrevivência por tratamento')) +
+  scale_y_continuous(limits = c(0.2, 1), breaks = seq(.2, 1, .1))
+```
+
+As seen on the plot above, the treatment has the opposite effect, since it makes it more likely for the client to leave the company.
+```{r}
+weibull_t <- survreg(Surv(stop, status) ~ factor(x), data = sim.data, dist="weibull")
+summary(weibull_t)
+```
