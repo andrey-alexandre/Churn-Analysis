@@ -1,8 +1,8 @@
 library(readr)
 library(dplyr)
+library(stringr)
 library(survival)
 library(ggplot2)
-library(muhaz)
 library(survsim)
 se <- function(y, y_hat){
   e <- y - y_hat
@@ -18,37 +18,47 @@ pe <- function(y, y_hat){
 }
 
 data <- 
-  read_csv('Data/Telco_Costumer_Churn.csv')%>% 
+  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
-  mutate(PaymentMethod = ifelse(stringr::str_detect(PaymentMethod, 'automatic'), 'Automatic', PaymentMethod),
-         SeniorCitizen = factor(SeniorCitizen, levels = c(0, 1), labels = c('No', 'Yes')),
-         Churn = ifelse(Churn == 'Yes', 1 ,0))  %>% 
-  mutate_if(is.character, as.factor)
+  mutate(PaymentMethod=ifelse(str_detect(PaymentMethod, 'automatic'),
+                              'Automatic', 
+                              PaymentMethod),
+         SeniorCitizen=factor(SeniorCitizen, levels = c(0, 1), 
+                              labels = c('No', 'Yes')),
+         Churn=ifelse(Churn == 'Yes', 1 ,0))  %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(Partner=relevel(Partner,'Yes'),
+         Dependents=relevel(Dependents,'Yes'),
+         InternetService=relevel(InternetService,'No'),
+         Contract=relevel(Contract,'Two year'))
 
 # Define variables 
 time <- data$tenure
 event <- data$Churn
-X <- data %>% select(-contains('ID'), -Churn, -tenure)
+X <- data %>% select(-contains('ID'), -Churn, -tenure,
+                     -MultipleLines, -OnlineBackup, -OnlineSecurity, 
+                     -DeviceProtection, -TechSupport, -StreamingTV, 
+                     -StreamingMovies, -gender, -SeniorCitizen)
 
 # Descriptive statistics
 summary(time)
-lohist(time)
+density(time) %>% plot
 
 summary(event)
 table(event) %>% prop.table() %>% round(2)
 
 summary(X)
 
-ggplot(aes(x = TotalCharges, y = tenure, col = InternetService), data = data) +
+ggplot(aes(x=TotalCharges, y=tenure, col=InternetService), data=data) +
   geom_point()
 
 # Kaplan-Meier non-parametric analysis
 kmsurvival <- survfit(Surv(time,event) ~ 1)
 summary_kmsurvival <- summary(kmsurvival)
-data.frame(time = summary_kmsurvival$time, prob=summary_kmsurvival$surv) %>% 
-  ggplot(aes(x = time, y = prob)) +
-  geom_line(color = 'red') +
-  labs(x = 'Tempo', y = 'Probabilidade de sobrevivência') +
+data.frame(time=summary_kmsurvival$time, prob=summary_kmsurvival$surv) %>% 
+  ggplot(aes(x=time, y=prob)) +
+  geom_line(color='red') +
+  labs(x='Tempo', y='Probabilidade de sobrevivência') +
   scale_y_continuous(limits = c(0, 1))
 
 # Kaplan-Meier non-parametric analysis by group
@@ -74,24 +84,21 @@ dev.off()
 
 # Cox proportional hazard model - coefficients and hazard rates
 coxph <- coxph(Surv(time, event) ~ .,
-               data = select(X, -MultipleLines, -OnlineBackup, -OnlineSecurity, 
-                             -DeviceProtection, -TechSupport, -StreamingTV, 
-                             -StreamingMovies, -gender, -SeniorCitizen), 
-               method="breslow")
+               data=X)
 summary_coxph <- summary(coxph)
 
 # Exponential, Weibull, and log-logistic parametric model coefficients
 # Opposite signs from Stata results, Weibull results differ; same as SAS
 logistic <-  survreg(Surv(time,event) ~ ., 
-                     data = select(X, -MultipleLines, -OnlineBackup, -OnlineSecurity, 
-                                   -DeviceProtection, -TechSupport, -StreamingTV, 
-                                   -StreamingMovies, -gender, -SeniorCitizen),
+                     data=X,
                      dist="logistic")
 summary(logistic)
 
 se(time, predict(logistic, type ='response')) %>% mean %>% sqrt
 pe(time, predict(logistic, type ='response')) %>% abs %>% median
 
+
+# saveRDS(logistic, file='Docs/Models/model1.rds')
 # Treatment simulation
 set.seed(145)
 sim.data <- simple.surv.sim(n=1000, foltime=36, dist.ev=c('llogistic'),

@@ -37,7 +37,7 @@ The first step for any project is the ETL so we can clean and do some feature en
 Here I have filter the 'tenure' column to remove the zero values since this column gives us the time that the client is with the company as months and we don't learn much from the clients that just joined the company. When working with the semi-parametric Cox proportional hazard model it was seen that the automatic payment methods had no significant difference, so we combine them to reduce our estimated parameters.
 ```{r message=FALSE}
 data <- 
-  read_csv('Data/Telco_Costumer_Churn.csv')%>% 
+  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
   mutate(PaymentMethod = ifelse(stringr::str_detect(PaymentMethod, 'automatic'), 'Automatic', PaymentMethod),
          SeniorCitizen = factor(SeniorCitizen, levels = c(0, 1), labels = c('No', 'Yes')),
@@ -73,7 +73,7 @@ summary(X)
 ```
 
 The following code is usefull for the EDA, since it gives us many plot at once, so if you want to see them, they are on the Survival.pdf file. As seen in the plots, there is little difference between gender for the survival probability. If you are a senior citizen, have internet services, have month to month contract or have paperless billing then you are more likely to be a churn as time passes by. If you have a partner, or dependents, you are more likely to stay with the company. And if doesn't make much difference to have phone service.
-```{r eval=FALSE, include=FALSE}
+```{r eval=FALSE}
 nomes <- colnames(select_if(X, is.factor))
 p <- list()
 
