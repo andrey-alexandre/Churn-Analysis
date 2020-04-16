@@ -18,7 +18,7 @@ pe <- function(y, y_hat){
 }
 
 data <- 
-  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Telco_Costumer_Churn.csv')%>% 
+  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Raw/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
   mutate(PaymentMethod=ifelse(str_detect(PaymentMethod, 'automatic'),
                               'Automatic', 
