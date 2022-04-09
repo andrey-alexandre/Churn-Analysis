@@ -5,7 +5,7 @@ library(lubridate)
 library(survival)
 library(coin)
 library(muhaz)
-# source('/home/andrey/Projetos/Churn-Analysis/Code/Modelling/Churn.R')
+# source('./Code/Modelling/Churn.R')
 
 
 # Define UI for application that draws a histogram
@@ -107,8 +107,14 @@ ui <-
 # Define server logic required to draw a histogram
 server <- function(input, output) {
   
+  con <- DBI::dbConnect(RMariaDB::MariaDB(), 
+                        host = "churn-mysql-container",
+                        user = "myuser",
+                        password = "password",
+                        dbname='churnApp')
+  
   X <- 
-    readr::read_csv2('/home/andrey/Projetos/Churn-Analysis/Data/Modelling/Telco_Costumer_Churn.csv') %>% 
+    tbl(con, 'CostumerChurn') %>% collect() %>% 
     mutate_if(is.character, as.factor) %>% 
     mutate(Treatment = as.factor(Treatment))
   time <- X$tenure
@@ -119,7 +125,7 @@ server <- function(input, output) {
       X %>%
         select(X = input$EDAGroupA) %>%
         group_by(X) %>%
-        summarise(N = n()) %>% mutate(Percentual = N/sum(N)) %>%
+        summarise(N = n()) %>% group_by(X) %>% mutate(Percentual = N/sum(N)) %>%
         ggplot(aes(x=X, y=Percentual))+
         geom_col()+
         geom_text(aes(y=Percentual+.01,
@@ -252,7 +258,7 @@ server <- function(input, output) {
         summarize(N = sum(event)) %>%
         ggplot(aes(x=time, y=N)) +
         geom_col(position='dodge', fill='grey') +
-        labs(x = 'Time', y = 'Number of failures', title = paste('Number of failures for', input$PrimaryGroup))
+        labs(x = 'Time', y = 'Number of churn', title = paste('Number of churn for', input$PrimaryGroup))
     }else{
       group <- X[, input$PrimaryGroup, T]
       data.frame(group, time, event) %>%
@@ -261,7 +267,7 @@ server <- function(input, output) {
         summarize(N = sum(event)) %>%
         ggplot(aes(x=time, y=N, fill=group)) +
         geom_col(position='dodge') +
-        labs(x = 'Time', y = 'Number of failures', title = paste('Number of failures for', input$PrimaryGroup))
+        labs(x = 'Time', y = 'Number of churn', title = paste('Number of churn for', input$PrimaryGroup))
       
     }
   })
@@ -309,38 +315,9 @@ server <- function(input, output) {
     return(TreatmentTable_)
   })
   output$TreatmentTable <- renderTable(TreatmentTable_())
-  # p_value <- reactive({
-  #   if(input$TreatmentGroup == 'Total'){
-  #     survival_data <- 
-  #       X %>% 
-  #       select(time=tenure, event=Churn, Treatment)
-  #     
-  #     test <- logrank_test(Surv(time, event) ~ Treatment, data = survival_data,
-  #                          distribution = "exact")
-  #     
-  #     p_value <- test@distribution@pvalue(test@statistic@teststatistic)
-  #     text_ <- ifelse(p_value < .05, 'Há diferença significativa entre os tratamentos', 'Não há diferença significativa entre os tratamentos')
-  #     
-  #   }else{
-  #     survival_data <- 
-  #       X %>% 
-  #       select(time=tenure, event=Churn, Treatment, strata=input$TreatmentGroup)
-  #     
-  #     test <- logrank_test(Surv(time, event) ~ Treatment|strata, data = survival_data,
-  #                          distribution = approximate(nresample = 10000))
-  #     
-  #     p_value <- test@distribution@pvalue(test@statistic@teststatistic)
-  #     text_ <- ifelse(p_value < .05, 'Há diferença significativa do tratamento para ao menos um dos grupos', 'Não há diferença significativa entre os grupos')
-  #     
-  #   }
-  #   
-  #   
-  #   return(text_)
-  # })
   output$p_value <- 
     renderText('Há diferença significativa entre os tratamentos')
-  # renderText(p_value())
-  
+
   output$TreatmentSurvivalPlot <- renderPlot({
     
     if(input$TreatmentGroup == 'Total'){

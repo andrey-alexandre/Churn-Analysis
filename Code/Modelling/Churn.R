@@ -4,6 +4,7 @@ library(stringr)
 library(survival)
 library(ggplot2)
 library(survsim)
+
 se <- function(y, y_hat){
   e <- y - y_hat
   se <- e^2
@@ -18,13 +19,11 @@ pe <- function(y, y_hat){
 }
 
 data <- 
-  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Raw/Telco_Costumer_Churn.csv')%>% 
+  read_csv('./Data/Raw/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
   mutate(PaymentMethod=ifelse(str_detect(PaymentMethod, 'automatic'),
                               'Automatic', 
                               PaymentMethod),
-         SeniorCitizen=factor(SeniorCitizen, levels = c(0, 1), 
-                              labels = c('No', 'Yes')),
          Churn=ifelse(Churn == 'Yes', 1 ,0))  %>% 
   mutate_if(is.character, as.factor) %>% 
   mutate(Partner=relevel(Partner,'Yes'),
@@ -97,8 +96,10 @@ summary(logistic)
 se(time, predict(logistic, type ='response')) %>% mean %>% sqrt
 pe(time, predict(logistic, type ='response')) %>% abs %>% median
 
+if(!file.exists('Docs/Models/model1.rds')){
+  saveRDS(logistic, file='Docs/Models/model1.rds')
+}
 
-# saveRDS(logistic, file='Docs/Models/model1.rds')
 # Treatment simulation
 set.seed(145)
 sim.data <- simple.surv.sim(n=1000, foltime=36, dist.ev=c('llogistic'),

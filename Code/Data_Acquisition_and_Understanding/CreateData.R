@@ -1,9 +1,10 @@
 library(readr)
 library(dplyr)
+library(stringr)
 library(lubridate)
 
 data <- 
-  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Raw/Telco_Costumer_Churn.csv')%>% 
+  read_csv('./Data/Raw/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
   mutate(PaymentMethod=ifelse(str_detect(PaymentMethod, 'automatic'),
                               'Automatic', 
@@ -19,7 +20,7 @@ data <-
   mutate(Date = Sys.Date()-30*tenure)
 
 data %>%
-  write_csv2('/home/andrey/Projetos/Churn-Analysis/Data/Preprocessed/Telco_Costumer_Churn.csv')
+  write_csv2('./Data/Preprocessed/Telco_Costumer_Churn.csv')
 
 data %>% 
   select(-contains('ID'), 
@@ -27,4 +28,4 @@ data %>%
          -DeviceProtection, -TechSupport, -StreamingTV, 
          -StreamingMovies, -gender, -SeniorCitizen) %>% 
   mutate(Treatment=rbinom(nrow(.), 1, .5)) %>% 
-  write_csv2('/home/andrey/Projetos/Churn-Analysis/Data/Modelling/Telco_Costumer_Churn.csv')
+  write_csv2('./Data/Modelling/Telco_Costumer_Churn.csv')
