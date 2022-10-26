@@ -3,6 +3,12 @@ title: "R Notebook"
 output:
   html_document:
     df_print: paged
+excerpt: "RMD TEST"
+tag:
+- "Survival Analysis"
+- "Churn"
+comments: true
+project: true
 ---
 ```{r Import libraries, include=FALSE}
 library(readr)
@@ -37,7 +43,7 @@ The first step for any project is the ETL so we can clean and do some feature en
 Here I have filter the 'tenure' column to remove the zero values since this column gives us the time that the client is with the company as months and we don't learn much from the clients that just joined the company. When working with the semi-parametric Cox proportional hazard model it was seen that the automatic payment methods had no significant difference, so we combine them to reduce our estimated parameters.
 ```{r message=FALSE}
 data <- 
-  read_csv('/home/andrey/Projetos/Churn-Analysis/Data/Telco_Costumer_Churn.csv')%>% 
+  read_csv('./Data/Raw/Telco_Costumer_Churn.csv')%>% 
   filter(tenure != 0) %>%
   mutate(PaymentMethod = ifelse(stringr::str_detect(PaymentMethod, 'automatic'), 'Automatic', PaymentMethod),
          SeniorCitizen = factor(SeniorCitizen, levels = c(0, 1), labels = c('No', 'Yes')),
